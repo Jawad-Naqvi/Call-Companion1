@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_URL=http://backend:8000
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
+      - WHISPER_API_KEY=${WHISPER_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./backend:/app
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

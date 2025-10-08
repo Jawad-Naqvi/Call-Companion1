@@ -1,0 +1,455 @@
+# Call Companion - AI-Powered Sales Call Management
+
+A real-time call management app for container sales teams that records, transcribes, and analyzes customer conversations using AI.
+
+## Deployment Guide
+
+## 🎯 Features
+
+### For Employees (Salespeople)
+- **Automatic Call Recording**: Global toggle to record all calls automatically
+- **WhatsApp-Style Interface**: Customer threads organized by phone number
+- **Real-Time Transcription**: Instant call transcription in multiple languages (Whisper API)
+- **AI-Powered Summaries**: 
+  - Call highlights
+  - Sentiment analysis (positive/negative/neutral)
+  - Suggested next steps
+  - Customer concerns tracking
+- **Thread-Level AI Chat**: Ask AI questions about customer history and get strategic sales advice
+- **Customer Management**: Add aliases/nicknames, company info, and contact details
+
+### For Admins (Managers)
+- **Employee Management**: View all employees in your company
+- **Call Review**: Access all employee calls, recordings, transcripts, and AI summaries
+- **Customer Analytics**: Track customer interactions across your team
+- **Performance Monitoring**: Review call quality and sales effectiveness
+
+## 🛠 Tech Stack
+
+### Frontend
+- **Flutter**: Cross-platform mobile app framework
+- **Provider**: State management
+- **Material Design 3**: Modern UI with light/dark themes
+
+### Backend Services
+- **Firebase Auth**: User authentication with role-based access
+- **Cloud Firestore**: Real-time database for calls, customers, and metadata
+- **Firebase Storage**: Encrypted audio file storage
+
+### AI & Transcription
+- **OpenAI Whisper API**: Multi-lingual call transcription
+- **Google Gemini API**: AI summaries and conversational chat
+- **Deepgram** (optional): Alternative transcription provider
+
+## 📋 Prerequisites
+
+Before you begin, ensure you have:
+
+1. **Flutter SDK** (3.6.0 or higher)
+   ```bash
+   flutter --version
+   ```
+
+2. **Firebase Project**
+   - Create a project at [Firebase Console](https://console.firebase.google.com/)
+   - Enable Authentication (Email/Password)
+   - Enable Cloud Firestore
+   - Enable Firebase Storage
+
+3. **API Keys**
+   - **OpenAI API Key**: For Whisper transcription ([Get API Key](https://platform.openai.com/api-keys))
+   - **Google Gemini API Key**: For AI summaries and chat ([Get API Key](https://makersuite.google.com/app/apikey))
+
+## 🚀 Setup Instructions
+
+### 1. Clone the Repository
+
+```bash
+cd call_companion
+```
+
+### 2. Install Dependencies
+
+```bash
+flutter pub get
+```
+
+### 3. Configure Firebase
+
+#### For Android:
+1. Download `google-services.json` from Firebase Console
+2. Place it in `android/app/`
+
+#### For iOS:
+1. Download `GoogleService-Info.plist` from Firebase Console
+2. Place it in `ios/Runner/`
+
+### 4. Configure Firestore Security Rules
+
+In Firebase Console → Firestore Database → Rules:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User authentication required
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isOwner(userId);
+    }
+    
+    // Customers collection
+    match /customers/{customerId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Calls collection
+    match /calls/{callId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isOwner(resource.data.employeeId) || isAdmin();
+    }
+    
+    // Transcripts collection
+    match /transcripts/{transcriptId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // AI Summaries collection
+    match /ai_summaries/{summaryId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Chat Messages collection
+    match /chat_messages/{messageId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}
+```
+
+### 5. Configure Firebase Storage Rules
+
+In Firebase Console → Storage → Rules:
+
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /calls/{callId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}
+```
+
+### 6. Set Up Android Permissions
+
+The app requires these permissions (already configured in `android/app/src/main/AndroidManifest.xml`):
+
+```xml
+<uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+<uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+<uses-permission android:name="android.permission.READ_CALL_LOG"/>
+```
+
+### 7. Build and Run
+
+```bash
+# For Android
+flutter run
+
+# For iOS
+flutter run -d ios
+
+# For release build
+flutter build apk --release
+flutter build ios --release
+```
+
+## 📱 Usage Guide
+
+### First Time Setup
+
+1. **Register an Account**
+   - Open the app
+   - Click "Sign Up"
+   - Choose role: Employee or Admin
+   - Enter company ID (same for all team members)
+
+2. **Enable Recording**
+   - Toggle the recording switch ON in the dashboard
+   - Grant microphone permissions when prompted
+
+### Recording Calls
+
+1. **Manual Recording**
+   - Open the app
+   - Ensure recording toggle is ON
+   - Make or receive a call
+   - Recording starts automatically
+   - Call is saved when you hang up
+
+2. **View Call Details**
+   - Navigate to customer thread
+   - Tap on any call
+   - Play audio recording
+   - Generate transcript (requires Whisper API key)
+   - Generate AI summary (requires Gemini API key)
+
+### Using AI Features
+
+#### Per-Call AI Summary
+1. Open call details
+2. Click "Generate Transcript" (enter Whisper API key)
+3. Click "Generate AI Summary" (enter Gemini API key)
+4. View:
+   - Call summary
+   - Sentiment analysis
+   - Key highlights
+   - Next steps
+   - Customer concerns
+
+#### Thread-Level AI Chat
+1. Open customer thread
+2. Click "Chat with AI"
+3. Enter Gemini API key when prompted
+4. Ask questions like:
+   - "What should I discuss in my next call?"
+   - "Summarize this customer's main concerns"
+   - "How close are we to closing the deal?"
+
+### Admin Features
+
+1. **View Employees**
+   - Login as Admin
+   - See all employees in your company
+
+2. **Review Calls**
+   - Select an employee
+   - View their customer threads
+   - Access all call recordings and summaries
+
+## 🔐 Security & Privacy
+
+- **Encryption**: All audio files are encrypted in Firebase Storage
+- **Authentication**: Firebase Auth with role-based access control
+- **API Keys**: Stored locally, never transmitted to backend
+- **Permissions**: Granular Firestore security rules
+- **Compliance**: GDPR-ready with data deletion capabilities
+
+## 🔑 API Key Management
+
+API keys are requested when needed and stored locally in the app session. For production:
+
+1. **Recommended**: Implement a secure backend proxy
+2. Store API keys server-side
+3. Use Firebase Functions to call external APIs
+4. Never hardcode API keys in the app
+
+## 📊 Database Schema
+
+### Collections
+
+#### `users`
+```json
+{
+  "id": "user_id",
+  "email": "user@example.com",
+  "name": "John Doe",
+  "role": "employee|admin",
+  "companyId": "company_id",
+  "isActive": true,
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+#### `customers`
+```json
+{
+  "id": "customer_id",
+  "employeeId": "user_id",
+  "phoneNumber": "+1234567890",
+  "name": "Jane Smith",
+  "alias": "ABC Corp Contact",
+  "company": "ABC Corporation",
+  "email": "jane@abc.com",
+  "lastContactDate": "timestamp",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+#### `calls`
+```json
+{
+  "id": "call_id",
+  "employeeId": "user_id",
+  "customerId": "customer_id",
+  "customerPhoneNumber": "+1234567890",
+  "type": "incoming|outgoing",
+  "status": "recording|completed|transcribing|analyzed",
+  "startTime": "timestamp",
+  "endTime": "timestamp",
+  "duration": 120,
+  "audioFileUrl": "https://...",
+  "audioFileName": "calls/call_id/recording.m4a",
+  "audioFileSize": 1024000,
+  "hasTranscript": true,
+  "hasAISummary": true,
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+#### `transcripts`
+```json
+{
+  "id": "transcript_id",
+  "callId": "call_id",
+  "employeeId": "user_id",
+  "customerId": "customer_id",
+  "fullText": "Transcript text...",
+  "segments": [
+    {
+      "text": "Hello",
+      "startTime": 0.0,
+      "endTime": 1.5
+    }
+  ],
+  "confidence": 0.95,
+  "transcriptionProvider": "whisper",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+#### `ai_summaries`
+```json
+{
+  "id": "summary_id",
+  "callId": "call_id",
+  "employeeId": "user_id",
+  "customerId": "customer_id",
+  "summary": "Brief call overview...",
+  "keyHighlights": ["Point 1", "Point 2"],
+  "sentiment": "positive|neutral|negative",
+  "sentimentScore": 0.8,
+  "nextSteps": ["Action 1", "Action 2"],
+  "concerns": ["Concern 1"],
+  "aiProvider": "gemini",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+#### `chat_messages`
+```json
+{
+  "id": "message_id",
+  "customerId": "customer_id",
+  "employeeId": "user_id",
+  "content": "Message text...",
+  "sender": "user|ai",
+  "relatedCallId": "call_id",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+## 🐛 Troubleshooting
+
+### Firebase Initialization Error
+```
+Solution: Ensure google-services.json (Android) or GoogleService-Info.plist (iOS) is properly configured
+```
+
+### Recording Permission Denied
+```
+Solution: Go to App Settings → Permissions → Enable Microphone
+```
+
+### Transcription Failed
+```
+Solution: 
+1. Check Whisper API key is valid
+2. Ensure audio file was uploaded successfully
+3. Verify internet connection
+```
+
+### AI Summary Error
+```
+Solution:
+1. Verify Gemini API key is correct
+2. Ensure transcript exists first
+3. Check API quota limits
+```
+
+## 🚧 Roadmap
+
+### Phase 1 (MVP) ✅
+- [x] Firebase authentication
+- [x] Call recording and storage
+- [x] Per-call transcription
+- [x] Per-call AI summary
+- [x] Customer thread interface
+- [x] Admin dashboard
+
+### Phase 2 (Enhanced)
+- [x] Thread-level AI chat
+- [x] Call detail screen with audio player
+- [ ] Automatic call detection
+- [ ] Background recording service
+- [ ] Push notifications
+
+### Phase 3 (Future)
+- [ ] Customer sentiment trends
+- [ ] Deal closure prediction
+- [ ] CRM integration (Salesforce, HubSpot)
+- [ ] Export reports (PDF, CSV)
+- [ ] Team analytics dashboard
+- [ ] Voice activity detection
+- [ ] Speaker diarization
+
+## 📄 License
+
+This project is created for educational and commercial purposes.
+
+## 🤝 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review Firebase Console logs
+3. Check API provider status pages
+
+## 🙏 Acknowledgments
+
+- **Flutter Team**: For the amazing framework
+- **Firebase**: For backend infrastructure
+- **OpenAI**: For Whisper transcription
+- **Google**: For Gemini AI
+- **DreamFlow**: For the initial project concept
+
+---
+
+**Built with ❤️ for sales teams who want to close more deals**
+#   C a l l - C o m p a n i o n 1  
+ 
