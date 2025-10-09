@@ -2,12 +2,33 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import httpx
 import logging
+from collections import deque
 import os
 from config import settings
-from auth import get_current_user
+from auth import get_current_user, optional_current_user
 from models import User
 
 logger = logging.getLogger(__name__)
+# Keep last N AI errors in memory for quick debugging
+_AI_ERRORS = deque(maxlen=50)
+_AI_EVENTS = deque(maxlen=50)
+
+def _record_error(source: str, api_version: str | None, model: str | None, status: int | None, body: str | None, note: str | None = None):
+    entry = {
+        "source": source,
+        "api_version": api_version,
+        "model": model,
+        "status": status,
+        "body": (body or "")[:2000],
+        "note": note,
+    }
+    _AI_ERRORS.appendleft(entry)
+    logger.error(f"AI error: {entry}")
+
+def _record_event(event: str, detail: dict | None = None):
+    entry = {"event": event, "detail": detail or {}}
+    _AI_EVENTS.appendleft(entry)
+    logger.info(f"AI event: {entry}")
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
@@ -23,12 +44,14 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_gemini(payload: ChatRequest, _: User = Depends(get_current_user)):
+async def chat_with_gemini(payload: ChatRequest, _user: User | None = Depends(optional_current_user)):
+    _record_event("chat_request_received", {"has_context": bool(payload.context), "message_len": len(payload.message or "")})
     # Prefer client-provided key so updating the app .env takes effect immediately,
     # but if it is invalid (e.g., referrer-restricted), we'll fall back to server env key.
     client_key = (payload.apiKey or '').strip() or None
     server_key = (settings.gemini_api_key or '').strip() or None
-    api_key = client_key or server_key
+    # Prefer server key in dev to avoid client .env issues; fall back to client key
+    api_key = server_key or client_key
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API key is not configured")
 
@@ -84,7 +107,7 @@ async def chat_with_gemini(payload: ChatRequest, _: User = Depends(get_current_u
                         resp = await client.post(url, json=data)
                     except Exception as e:
                         last_error_text = str(e)
-                        logger.error(f"Gemini request failed ({key_label}/{api_version}/{model}): {e}")
+                        _record_error(key_label, api_version, model, None, last_error_text, "exception during request")
                         continue
 
                     if resp.status_code == 200:
@@ -96,14 +119,16 @@ async def chat_with_gemini(payload: ChatRequest, _: User = Depends(get_current_u
                                 parts = content.get("parts") or []
                                 if parts:
                                     text = parts[0].get("text") or ""
+                                    _record_event("chat_success", {"model": model, "api_version": api_version})
                                     return ChatResponse(reply=text)
                         except Exception as parse_err:
-                            logger.error(f"Gemini parse error ({key_label}/{api_version}/{model}): {parse_err} | body={resp.text}")
+                            _record_error(key_label, api_version, model, resp.status_code, resp.text, f"parse error: {parse_err}")
                             # try next model
                             continue
                     else:
                         # If key invalid, try next key source; otherwise continue across versions/models
                         last_error_text = resp.text
+                        _record_error(key_label, api_version, model, resp.status_code, resp.text, "http error")
                         if resp.status_code == 400 and 'API_KEY_INVALID' in resp.text:
                             logger.error(f"Gemini key invalid for {key_label}. Trying next key if available.")
                             # break out of version/model loops to move to next key
@@ -122,3 +147,14 @@ async def chat_with_gemini(payload: ChatRequest, _: User = Depends(get_current_u
             "Please verify the server AI key and quota, then try again." + diagnostic
         )
     )
+
+@router.get("/diagnostics")
+async def ai_diagnostics():
+    """Return last AI errors for debugging (dev use only)."""
+    if not settings.debug_ai:
+        return {"message": "AI diagnostics disabled"}
+    return {"recent_errors": list(_AI_ERRORS), "recent_events": list(_AI_EVENTS)}
+
+@router.get("/ping")
+async def ai_ping():
+    return {"ok": True, "note": "AI router is reachable"}

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # API
     api_host: str = os.getenv("HOST", "0.0.0.0")
-    api_port: int = int(os.getenv("PORT", "8000"))
+    api_port: int = int(os.getenv("PORT", "8001"))  # Changed default to 8001
     
     # CORS
     cors_origins: list = [
@@ -30,13 +30,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:61006",
         "http://localhost:50569",  # Current Flutter dev server
         "http://127.0.0.1:50569",
-        "http://localhost:50656",  # Browser preview proxy
-        "http://127.0.0.1:50656",
+        "http://localhost:55338",  # Current Flutter web dev server
+        "http://127.0.0.1:55338",
         "*"  # Allow all origins for development
     ]
 
     # External APIs
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    # Debug flags
+    debug_ai: bool = os.getenv("DEBUG_AI", "true").lower() in ("1", "true", "yes", "on")
 
     class Config:
         env_file = "../.env"

@@ -11,17 +11,22 @@ import 'package:call_companion/screens/auth/login_screen.dart';
 import 'package:call_companion/screens/employee/employee_dashboard.dart';
 import 'package:call_companion/screens/admin/admin_dashboard.dart';
 import 'package:call_companion/services/env_service.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Load environment variables
   try {
-    await dotenv.load(fileName: ".env");
-    print('Environment variables loaded successfully');
+    if (!kIsWeb) {
+      await dotenv.load(fileName: ".env");
+      print('Environment variables loaded successfully');
+    } else {
+      // On web we rely on the backend's Gemini key; avoid fetching assets/.env
+      print('Skipping .env load on web');
+    }
     EnvService.printConfiguration();
   } catch (e) {
     print('Error loading .env file: $e');
+    // Continue without .env on web; backend will supply AI key
   }
   
   // Initialize Firebase with environment variables

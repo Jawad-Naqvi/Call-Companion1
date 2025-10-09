@@ -74,18 +74,14 @@ class AIService {
 
       String? response;
       if (kIsWeb) {
-        // Call backend proxy to avoid CORS and Firebase on web
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('auth_token');
+        // Call backend proxy on web using server-side key; no auth header needed
         final headers = {
           'Content-Type': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
         };
         final body = jsonEncode({
           'message': userMessage,
           'context': context,
           'temperature': 0.7,
-          'apiKey': Environment.geminiApiKey,
         });
         final resp = await http.post(
           Uri.parse('http://127.0.0.1:8001/api/ai/chat'),
@@ -96,6 +92,7 @@ class AIService {
           final data = jsonDecode(resp.body);
           response = data['reply'] as String?;
         } else {
+          print('AI proxy error ${resp.statusCode}: ${resp.body}');
           throw Exception('AI proxy error ${resp.statusCode}: ${resp.body}');
         }
       } else {
@@ -312,24 +309,29 @@ Keep responses concise but comprehensive, focusing on practical sales strategies
       final msgId = _uuid.v4();
       if (kIsWeb) {
         // Persist to local storage on web so UI can render history
-        final prefs = await SharedPreferences.getInstance();
-        final key = 'chat_${customerId}_${employeeId}';
-        final raw = prefs.getString(key);
-        final List<dynamic> list = raw != null ? jsonDecode(raw) as List<dynamic> : <dynamic>[];
-        final map = {
-          'id': msgId,
-          'customerId': customerId,
-          'employeeId': employeeId,
-          'content': content,
-          'sender': sender.name,
-          'type': MessageType.text.name,
-          'metadata': null,
-          'relatedCallId': relatedCallId,
-          'createdAt': now.toIso8601String(),
-          'updatedAt': now.toIso8601String(),
-        };
-        list.add(map);
-        await prefs.setString(key, jsonEncode(list));
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final key = 'chat_${customerId}_${employeeId}';
+          final raw = prefs.getString(key);
+          final List<dynamic> list = raw != null ? jsonDecode(raw) as List<dynamic> : <dynamic>[];
+          final map = {
+            'id': msgId,
+            'customerId': customerId,
+            'employeeId': employeeId,
+            'content': content,
+            'sender': sender.name,
+            'type': MessageType.text.name,
+            'metadata': null,
+            'relatedCallId': relatedCallId,
+            'createdAt': now.toIso8601String(),
+            'updatedAt': now.toIso8601String(),
+          };
+          list.add(map);
+          await prefs.setString(key, jsonEncode(list));
+        } catch (e) {
+          // Don't block UI on web if local storage is unavailable
+          print('Web local storage error: $e');
+        }
         return;
       }
 

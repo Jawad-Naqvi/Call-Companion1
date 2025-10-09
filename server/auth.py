@@ -23,6 +23,7 @@ pwd_context = CryptContext(
 
 # JWT token scheme
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash (supports bcrypt_sha256)."""
@@ -104,3 +105,20 @@ def get_current_admin_user(current_user: User = Depends(get_current_user)) -> Us
             detail="Admin access required"
         )
     return current_user
+
+def optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_security),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Return the current user if a valid token is provided; otherwise None.
+    Does not raise 401. Useful for endpoints that can work anonymously in dev.
+    """
+    if not credentials:
+        return None
+    payload = verify_token(credentials.credentials)
+    if payload is None:
+        return None
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        return None
+    return db.query(User).filter(User.id == user_id).first()

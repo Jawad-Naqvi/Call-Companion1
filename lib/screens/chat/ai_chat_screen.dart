@@ -69,15 +69,19 @@ class _AIChatScreenState extends State<AIChatScreen> {
       return;
     }
 
+    print('Sending message: $message');
     _messageController.clear();
     setState(() => _isLoading = true);
 
     try {
+      print('Calling AI service...');
       final response = await _aiService.generateAIResponse(
         userMessage: message,
         customerId: widget.customer.id,
         employeeId: employeeId,
       );
+
+      print('AI response received: ${response != null}');
 
       if (response != null) {
         await _loadChatHistory();
@@ -86,7 +90,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
         _showError('Failed to get AI response');
       }
     } catch (e) {
-      _showError('Error sending message');
+      print('Chat error details: $e');
+      _showError('Error: ${e.toString()}');
     } finally {
       setState(() => _isLoading = false);
     }

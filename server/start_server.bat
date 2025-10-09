@@ -28,7 +28,7 @@ if not defined JWT_SECRET (
 )
 
 REM Start the server
-echo Starting FastAPI server on http://127.0.0.1:8000
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+echo Starting FastAPI server on http://127.0.0.1:8001
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload --log-level debug --access-log
 
 pause

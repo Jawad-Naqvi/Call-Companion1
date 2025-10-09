@@ -210,7 +210,7 @@ class AuthService {
           createdAt: _safeParseDate(userData['createdAt']),
           updatedAt: _safeParseDate(userData['updatedAt']),
         );
-      } else if (response.statusCode == 401) {
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
         // Token expired or invalid
         await _removeToken();
         return null;
