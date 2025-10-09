@@ -7,8 +7,9 @@ class UserAuthResult {
   final bool isSuccess;
   final User? user;
   final String? error;
+  final String? code;
 
-  UserAuthResult._({required this.isSuccess, this.user, this.error});
+  UserAuthResult._({required this.isSuccess, this.user, this.error, this.code});
 
   factory UserAuthResult.success(User user) {
     return UserAuthResult._(isSuccess: true, user: user);
@@ -16,6 +17,16 @@ class UserAuthResult {
 
   factory UserAuthResult.error(String error) {
     return UserAuthResult._(isSuccess: false, error: error);
+  }
+
+  // Add for phone authentication code sent state
+  factory UserAuthResult.codeSent(String code) {
+    return UserAuthResult._(isSuccess: false, code: code);
+  }
+
+  // Add for pending state
+  factory UserAuthResult.pending() {
+    return UserAuthResult._(isSuccess: false);
   }
 }
 

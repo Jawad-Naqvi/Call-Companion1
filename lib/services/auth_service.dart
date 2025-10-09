@@ -262,7 +262,14 @@ class UserAuthResult {
   final bool isSuccess;
   final User? user;
   final String? error;
+  final String? code;
 
-  UserAuthResult.success(this.user) : isSuccess = true, error = null;
-  UserAuthResult.error(this.error) : isSuccess = false, user = null;
+  UserAuthResult.success(this.user) : isSuccess = true, error = null, code = null;
+  UserAuthResult.error(this.error) : isSuccess = false, user = null, code = null;
+
+  // Add for phone authentication code sent state
+  UserAuthResult.codeSent(this.code) : isSuccess = false, user = null, error = null;
+
+  // Add for pending state
+  UserAuthResult.pending() : isSuccess = false, user = null, error = null, code = null;
 }

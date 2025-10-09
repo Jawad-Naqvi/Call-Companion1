@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:call_companion/services/auth_service.dart' if (dart.library.html) 'package:call_companion/services/auth_api_service.dart';
+import 'package:call_companion/services/auth_service.dart' if (dart.library.html) 'package:call_companion/services/auth_api_service.dart' as auth_service;
 import 'package:call_companion/models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
-  late AuthApiService _authService;
+  late auth_service.AuthService _authService;
 
   User? _user;
   bool _isLoading = true;
@@ -23,7 +23,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _init() async {
-    _authService = AuthApiService();
+    _authService = auth_service.AuthService();
     
     // Check if user is already authenticated
     _user = await _authService.getCurrentAppUser();
