@@ -110,9 +110,10 @@ class AuthService {
           if (userCredential.user != null) {
             final appUser = await _getUserData(userCredential.user!.uid);
             if (appUser != null) {
-              return UserAuthResult.success(appUser);
+              // Handle success case - could set a variable or call a callback
+              // Do NOT return a value here
             }
-            
+
             // If user doesn't exist in Firestore, create a new employee user
             final newUser = User(
               id: userCredential.user!.uid,
@@ -124,19 +125,20 @@ class AuthService {
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
             );
-            
+
             await _firestore.collection('users').doc(newUser.id).set(newUser.toJson());
-            return UserAuthResult.success(newUser);
+            // Handle success case - could set a variable or call a callback
+            // Do NOT return a value here
           }
-          return UserAuthResult.error('Verification failed');
+          // Do NOT return a value here
         },
         verificationFailed: (auth.FirebaseAuthException e) {
           onError(_getAuthErrorMessage(e.code));
-          return UserAuthResult.error(_getAuthErrorMessage(e.code));
+          // Do NOT return a value here
         },
         codeSent: (String verificationId, int? resendToken) {
           onCodeSent(verificationId);
-          return UserAuthResult.codeSent(verificationId);
+          // Do NOT return a value here
         },
         codeAutoRetrievalTimeout: (String verificationId) {
           // Auto-retrieval timeout
