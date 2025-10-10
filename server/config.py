@@ -1,23 +1,32 @@
 import os
 from pydantic_settings import BaseSettings
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+import logging
 
-# Load environment variables from parent directory .env file
-load_dotenv(dotenv_path="../.env")
+logger = logging.getLogger(__name__)
+
+# Load environment variables from .env file
+# Use find_dotenv() to search for .env file in parent directories
+env_file = find_dotenv()
+if env_file:
+    load_dotenv(env_file)
+    logger.info(f"Loaded environment from: {env_file}")
+else:
+    logger.warning("No .env file found - using environment variables only")
 
 class Settings(BaseSettings):
     # Database
     neon_connection_string: str = os.getenv("NEON_CONNECTION_STRING", "")
-    
+
     # JWT
     jwt_secret: str = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production")
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = int(os.getenv("JWT_EXPIRES_MINUTES", "1440"))  # 24 hours
-    
+
     # API
     api_host: str = os.getenv("HOST", "0.0.0.0")
     api_port: int = int(os.getenv("PORT", "8001"))  # Changed default to 8001
-    
+
     # CORS
     cors_origins: list = [
         "http://localhost:3000",
@@ -44,4 +53,16 @@ class Settings(BaseSettings):
         env_file = "../.env"
         extra = "ignore"
 
+# Create settings instance
 settings = Settings()
+
+# Log configuration status
+logger.info("=== Configuration Status ===")
+logger.info(f"Database URL configured: {bool(settings.neon_connection_string)}")
+logger.info(f"Gemini API Key configured: {bool(settings.gemini_api_key)}")
+logger.info(f"API Host: {settings.api_host}:{settings.api_port}")
+logger.info(f"JWT configured: {bool(settings.jwt_secret != 'your-super-secret-jwt-key-change-this-in-production')}")
+logger.info("=============================")
+
+# Export a flag for database availability
+DB_AVAILABLE = bool(settings.neon_connection_string)

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import create_engine, MetaData, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from config import settings
@@ -6,29 +6,57 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Create database engine
-engine = create_engine(
-    settings.neon_connection_string.replace("postgresql://", "postgresql+psycopg://"),
-    pool_pre_ping=True,
-    pool_recycle=300,
-    echo=False  # Set to True for SQL debugging
-)
+# Only create engine if database URL is configured
+if settings.neon_connection_string:
+    try:
+        logger.info("Creating database engine...")
+        # Create database engine
+        engine = create_engine(
+            settings.neon_connection_string.replace("postgresql://", "postgresql+psycopg://"),
+            pool_pre_ping=True,
+            pool_recycle=300,
+            echo=False  # Set to True for SQL debugging
+        )
 
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        # Create session factory
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create base class for models
-Base = declarative_base()
+        # Create base class for models
+        Base = declarative_base()
+
+        # Flag to indicate database is available
+        DB_ENGINE_AVAILABLE = True
+        logger.info("✅ Database engine created successfully")
+
+    except Exception as e:
+        logger.error(f"Failed to create database engine: {e}")
+        # Create a dummy engine that will fail gracefully
+        engine = None
+        SessionLocal = None
+        Base = None
+        DB_ENGINE_AVAILABLE = False
+        logger.warning("⚠️ Database engine creation failed - server will run but database features may not work")
+else:
+    logger.warning("No database URL configured - database features will not work")
+    engine = None
+    SessionLocal = None
+    Base = None
+    DB_ENGINE_AVAILABLE = False
 
 def ensure_users_table():
     """Ensure critical columns exist on the 'users' table.
     This reconciles older databases that may miss new columns like 'hashed_password'.
     Safe to run repeatedly.
     """
+    if not DB_ENGINE_AVAILABLE or not engine:
+        logger.warning("Database engine not available - skipping schema reconciliation")
+        return
+
     try:
-        from sqlalchemy import text
+        logger.info("Starting schema reconciliation...")
         with engine.begin() as conn:
             # Ensure table exists
+            logger.info("Creating users table if not exists...")
             conn.execute(text(
                 """
                 CREATE TABLE IF NOT EXISTS public.users (
@@ -44,7 +72,10 @@ def ensure_users_table():
                 );
                 """
             ))
+            logger.info("✅ Users table created/verified")
+
             # Fetch existing column names
+            logger.info("Checking existing columns...")
             cols = conn.execute(text(
                 """
                 SELECT column_name
@@ -53,6 +84,7 @@ def ensure_users_table():
                 """
             )).fetchall()
             existing = {row[0] for row in cols}
+            logger.info(f"Existing columns: {existing}")
 
             # Define required columns and their SQL definitions
             required = {
@@ -74,6 +106,7 @@ def ensure_users_table():
 
             # Ensure updated_at auto-update trigger (optional, idempotent)
             if "updated_at" in required:
+                logger.info("Creating updated_at trigger...")
                 conn.execute(text(
                     """
                     CREATE OR REPLACE FUNCTION set_updated_at()
@@ -95,8 +128,10 @@ def ensure_users_table():
                     END $$;
                     """
                 ))
+                logger.info("✅ Updated_at trigger created")
 
             # Inspect id column type/default
+            logger.info("Checking id column configuration...")
             id_col_info = conn.execute(text(
                 """
                 SELECT data_type, column_default
@@ -112,6 +147,7 @@ def ensure_users_table():
                     conn.execute(text("ALTER TABLE public.users ADD COLUMN id INTEGER"))
 
                 # Create sequence and attach as default
+                logger.info("Creating id sequence...")
                 conn.execute(text("CREATE SEQUENCE IF NOT EXISTS public.users_id_seq"))
                 conn.execute(text("ALTER TABLE public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq')"))
                 # Sync sequence to current max(id)
@@ -131,20 +167,34 @@ def ensure_users_table():
                     END $$;
                     """
                 ))
+                logger.info("✅ ID sequence and primary key configured")
 
             # Create case-insensitive unique index on email
+            logger.info("Creating email unique index...")
             conn.execute(text(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_ci
                 ON public.users (lower(trim(email)));
                 """
             ))
+            logger.info("✅ Email unique index created")
+
         logger.info("✅ Schema reconciliation complete for 'users' table")
     except Exception as e:
         logger.error(f"❌ Schema reconciliation failed: {e}")
+        raise
 
 # Dependency to get database session
 def get_db():
+    if not DB_ENGINE_AVAILABLE or not SessionLocal:
+        logger.warning("Database not available - returning 503 error")
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available"
+        )
+
+    logger.debug("Creating database session...")
     db = SessionLocal()
     try:
         yield db
@@ -157,9 +207,13 @@ def get_db():
 
 # Test database connection
 def test_connection():
+    if not DB_ENGINE_AVAILABLE or not engine:
+        logger.warning("Database engine not available for connection test")
+        return False
+
     try:
+        logger.info("Testing database connection...")
         with engine.connect() as connection:
-            from sqlalchemy import text
             result = connection.execute(text("SELECT 1"))
             logger.info("✅ Database connection successful")
             return True

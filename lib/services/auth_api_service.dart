@@ -31,7 +31,8 @@ class UserAuthResult {
 }
 
 class AuthService {
-  static const String baseUrl = 'http://127.0.0.1:8001/api';
+  // Use LAN IP for physical devices so they can reach your PC backend
+  static const String baseUrl = 'http://192.168.1.17:8001/api';
   static const String tokenKey = 'auth_token';
   
   // Mock auth state changes stream for compatibility

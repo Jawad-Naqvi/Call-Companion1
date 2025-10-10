@@ -11,6 +11,7 @@ import 'package:call_companion/screens/auth/login_screen.dart';
 import 'package:call_companion/screens/employee/employee_dashboard.dart';
 import 'package:call_companion/screens/admin/admin_dashboard.dart';
 import 'package:call_companion/services/env_service.dart';
+import 'package:call_companion/config/app_config.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -34,11 +35,19 @@ void main() async {
     try {
       await Firebase.initializeApp();
       print('Firebase initialized successfully');
+      AppConfig.useApiAuth = false; // use Firebase auth on mobile
     } catch (e) {
       print('Firebase initialization error: $e');
-      // Continue without Firebase for development
+      // Fall back to API auth on mobile if Firebase is unavailable
+      AppConfig.useApiAuth = true;
+      print('AppConfig.useApiAuth enabled (Firebase unavailable)');
     }
+  } else {
+    // On web we always use API auth
+    AppConfig.useApiAuth = true;
   }
+
+  print('Auth mode: ' + (AppConfig.useApiAuth ? 'API auth' : 'Firebase auth'));
   
   runApp(const CallCompanionApp());
 }

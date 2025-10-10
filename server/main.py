@@ -5,10 +5,27 @@ from contextlib import asynccontextmanager
 import logging
 import uvicorn
 
-from config import settings
-from database import Base, engine, test_connection, ensure_users_table
-from routes import auth
-from routes import ai
+# Import with error handling to prevent startup crashes
+try:
+    from config import settings, DB_AVAILABLE
+    CONFIG_LOADED = True
+except Exception as e:
+    print(f"❌ Config import failed: {e}")
+    CONFIG_LOADED = False
+    settings = None
+    DB_AVAILABLE = False
+
+try:
+    from database import Base, engine, test_connection, ensure_users_table, DB_ENGINE_AVAILABLE
+    DATABASE_LOADED = True
+except Exception as e:
+    print(f"❌ Database import failed: {e}")
+    DATABASE_LOADED = False
+    Base = None
+    engine = None
+    test_connection = lambda: False
+    ensure_users_table = lambda: None
+    DB_ENGINE_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(
@@ -17,33 +34,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global flag for database availability
+db_connected = False
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
+    global db_connected
+
     # Startup
     logger.info("🚀 Starting Call Companion API Server...")
-    
-    # Test database connection
-    if not test_connection():
-        logger.error("❌ Database connection failed - server may not work properly")
-    
-    # Reconcile schema (idempotent) before creating tables
-    try:
-        ensure_users_table()
-    except Exception as e:
-        logger.error(f"❌ Schema reconciliation raised an error: {e}")
 
-    # Create database tables
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("✅ Database tables created/verified")
-    except Exception as e:
-        logger.error(f"❌ Database table creation failed: {e}")
-    
+    # Test database connection only if everything loaded properly
+    if CONFIG_LOADED and DATABASE_LOADED and DB_AVAILABLE and DB_ENGINE_AVAILABLE:
+        try:
+            logger.info("Testing database connection...")
+            if test_connection():
+                db_connected = True
+                logger.info("✅ Database connection successful")
+
+                # Reconcile schema (idempotent) before creating tables
+                try:
+                    logger.info("Reconciling database schema...")
+                    ensure_users_table()
+                    logger.info("✅ Schema reconciliation complete")
+                except Exception as e:
+                    logger.error(f"❌ Schema reconciliation raised an error: {e}")
+                    # Don't crash the server for schema issues
+
+                # Create database tables
+                try:
+                    logger.info("Creating/verifying database tables...")
+                    if Base and engine:
+                        Base.metadata.create_all(bind=engine)
+                    logger.info("✅ Database tables created/verified")
+                except Exception as e:
+                    logger.error(f"❌ Database table creation failed: {e}")
+                    # Don't crash the server for table creation issues
+            else:
+                logger.warning("⚠️ Database connection failed - server will run but auth may not work")
+                db_connected = False
+        except Exception as e:
+            logger.error(f"❌ Database initialization error: {e}")
+            logger.warning("⚠️ Server will run but database-dependent features may not work")
+            db_connected = False
+    else:
+        logger.warning("⚠️ Database or config not properly loaded - server will run in limited mode")
+        db_connected = False
+
     logger.info("✅ Server startup complete")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("🛑 Shutting down Call Companion API Server...")
 
@@ -64,9 +106,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(auth.router, prefix="/api")
-app.include_router(ai.router, prefix="/api")
+# Include routers with error handling
+try:
+    from routes import auth
+    app.include_router(auth.router, prefix="/api")
+    logger.info("✅ Auth routes loaded")
+except Exception as e:
+    logger.error(f"❌ Auth routes failed to load: {e}")
+
+try:
+    from routes import ai
+    app.include_router(ai.router, prefix="/api")
+    logger.info("✅ AI routes loaded")
+except Exception as e:
+    logger.error(f"❌ AI routes failed to load: {e}")
 
 # Health check endpoint
 @app.get("/health")
@@ -75,7 +128,32 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "call-companion-api",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "database_connected": db_connected,
+        "config_loaded": CONFIG_LOADED,
+        "database_loaded": DATABASE_LOADED
+    }
+
+# API health check endpoint
+@app.get("/api/health")
+async def api_health_check():
+    """API health check with detailed status."""
+    gemini_configured = False
+    api_host = "0.0.0.0:8001"
+
+    if CONFIG_LOADED and settings:
+        gemini_configured = bool(settings.gemini_api_key)
+        api_host = f"{settings.api_host}:{settings.api_port}"
+
+    return {
+        "status": "ok",
+        "database_connected": db_connected,
+        "database_url_configured": DB_AVAILABLE if CONFIG_LOADED else False,
+        "gemini_api_configured": gemini_configured,
+        "api_host": api_host,
+        "auth_mode": "api_auth" if not db_connected else "full_auth",
+        "config_loaded": CONFIG_LOADED,
+        "database_loaded": DATABASE_LOADED
     }
 
 # Root endpoint
@@ -86,7 +164,8 @@ async def root():
         "message": "Call Companion API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "api_health": "/api/health"
     }
 
 # Global exception handler
@@ -100,10 +179,18 @@ async def global_exception_handler(request, exc):
     )
 
 if __name__ == "__main__":
+    # Use default settings if config failed to load
+    host = "0.0.0.0"
+    port = 8001
+
+    if CONFIG_LOADED and settings:
+        host = settings.api_host
+        port = settings.api_port
+
     uvicorn.run(
         "main:app",
-        host=settings.api_host,
-        port=settings.api_port,
+        host=host,
+        port=port,
         reload=True,
         log_level="info"
     )

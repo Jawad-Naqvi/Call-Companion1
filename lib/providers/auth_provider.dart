@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:call_companion/services/auth_service.dart' if (dart.library.html) 'package:call_companion/services/auth_api_service.dart' as auth_service;
+import 'package:call_companion/config/app_config.dart';
+import 'package:call_companion/services/auth_service.dart' as fb_auth;
+import 'package:call_companion/services/auth_api_service.dart' as api_auth;
 import 'package:call_companion/models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
-  late auth_service.AuthService _authService;
+  late dynamic _authService; // fb_auth.AuthService or api_auth.AuthService
 
   User? _user;
   bool _isLoading = true;
@@ -23,12 +25,17 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _init() async {
-    _authService = auth_service.AuthService();
+    // Choose auth implementation at runtime
+    if (AppConfig.useApiAuth) {
+      _authService = api_auth.AuthService();
+    } else {
+      _authService = fb_auth.AuthService();
+    }
     
     // Check if user is already authenticated
     _user = await _authService.getCurrentAppUser();
     
-    if (!kIsWeb) {
+    if (!AppConfig.useApiAuth && !kIsWeb) {
       _authService.authStateChanges.listen((_) async {
         _isLoading = true;
         notifyListeners();
