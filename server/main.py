@@ -121,6 +121,13 @@ try:
 except Exception as e:
     logger.error(f"❌ AI routes failed to load: {e}")
 
+try:
+    from routes import calls
+    app.include_router(calls.router, prefix="/api")
+    logger.info("✅ Calls routes loaded")
+except Exception as e:
+    logger.error(f"❌ Calls routes failed to load: {e}")
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():

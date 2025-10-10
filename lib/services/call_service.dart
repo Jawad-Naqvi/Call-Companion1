@@ -5,8 +5,10 @@ import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:call_companion/models/call.dart';
+import 'package:call_companion/services/neon_call_service.dart';
 
 class CallService {
+  final NeonCallService _neonService = NeonCallService();
   Future<void> enableGlobalRecording() async {
     _globalRecordingEnabled = true;
     // Here you would start the background service if needed
@@ -201,6 +203,27 @@ class CallService {
           .collection('calls')
           .doc(_currentCallId!)
           .update(updatedCall.toJson());
+
+      // Also upload to Neon database for backup and analytics
+      try {
+        print('[CallService] Uploading call to Neon database...');
+        await _neonService.uploadCallRecording(
+          userId: call.employeeId,
+          customerNumber: call.customerPhoneNumber,
+          customerName: null, // Can be enriched later
+          callType: call.type == CallType.incoming ? 'incoming' : 'outgoing',
+          startedAt: call.startTime,
+          endedAt: endTime,
+          durationSec: duration,
+          firebaseCallId: _currentCallId,
+          firebaseAudioUrl: downloadUrl,
+          audioFile: file,
+        );
+        print('[CallService] ✅ Call uploaded to Neon database');
+      } catch (e) {
+        print('[CallService] ⚠️ Failed to upload to Neon (non-critical): $e');
+        // Don't fail the whole operation if Neon upload fails
+      }
 
       // Clean up local file
       try {

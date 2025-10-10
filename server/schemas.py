@@ -44,3 +44,40 @@ class MessageResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     detail: Optional[str] = None
+
+# Call Recording schemas
+class CallRecordUploadRequest(BaseModel):
+    user_id: str
+    customer_number: str
+    customer_name: Optional[str] = None
+    call_type: str  # incoming/outgoing
+    started_at: str  # ISO format
+    ended_at: Optional[str] = None  # ISO format
+    duration_sec: Optional[int] = None
+    firebase_call_id: Optional[str] = None
+    firebase_audio_url: Optional[str] = None
+
+class CallRecordResponse(BaseModel):
+    id: str
+    userId: str
+    customerNumber: str
+    customerName: Optional[str] = None
+    callType: str
+    status: str
+    startedAt: Optional[str] = None
+    endedAt: Optional[str] = None
+    durationSec: Optional[int] = None
+    audioFileSize: Optional[int] = None
+    audioMimeType: Optional[str] = None
+    firebaseCallId: Optional[str] = None
+    firebaseAudioUrl: Optional[str] = None
+    transcriptText: Optional[str] = None
+    aiSummary: Optional[str] = None
+    sentimentScore: Optional[float] = None
+    notes: Optional[str] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+    hasAudio: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
