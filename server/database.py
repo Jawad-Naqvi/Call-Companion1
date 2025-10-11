@@ -10,11 +10,20 @@ logger = logging.getLogger(__name__)
 if settings.neon_connection_string:
     try:
         logger.info("Creating database engine...")
-        # Create database engine
+        # Create database engine with production-ready connection pooling
         engine = create_engine(
             settings.neon_connection_string.replace("postgresql://", "postgresql+psycopg://"),
-            pool_pre_ping=True,
-            pool_recycle=300,
+            pool_pre_ping=True,  # Verify connections before using them
+            pool_recycle=3600,  # Recycle connections after 1 hour
+            pool_size=10,  # Maintain 10 connections in the pool
+            max_overflow=20,  # Allow up to 20 additional connections
+            connect_args={
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            },
             echo=False  # Set to True for SQL debugging
         )
 

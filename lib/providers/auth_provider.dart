@@ -32,8 +32,16 @@ class AuthProvider extends ChangeNotifier {
       _authService = fb_auth.AuthService();
     }
     
-    // Check if user is already authenticated
-    _user = await _authService.getCurrentAppUser();
+    // Optionally force login screen on startup (do not auto-restore prior session)
+    if (AppConfig.forceLoginOnStartup) {
+      try {
+        await _authService.signOut(); // clears any stored token/session
+      } catch (_) {}
+      _user = null;
+    } else {
+      // Check if user is already authenticated
+      _user = await _authService.getCurrentAppUser();
+    }
     
     if (!AppConfig.useApiAuth && !kIsWeb) {
       _authService.authStateChanges.listen((_) async {

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:call_companion/models/user_preferences.dart';
 import 'package:call_companion/services/background_recording_service.dart';
+import 'package:call_companion/services/call_service.dart';
 
 class RecordingProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final CallService _callService = CallService();
   
   bool _isRecordingEnabled = false;
   bool _isInitialized = false;
@@ -44,6 +46,9 @@ class RecordingProvider extends ChangeNotifier {
       // Start the background service if recording is enabled
       if (_isRecordingEnabled) {
         await BackgroundRecordingService.startService();
+        // Attach phone state detection for automatic start/stop
+        await _callService.enableGlobalRecording(employeeId: userId);
+        _isServiceRunning = true;
       }
       
       notifyListeners();
@@ -70,8 +75,11 @@ class RecordingProvider extends ChangeNotifier {
       // Start or stop the background service
       if (newState) {
         await BackgroundRecordingService.startService();
+        // Enable auto detection (Android) and permissions
+        await _callService.enableGlobalRecording(employeeId: userId);
         _isServiceRunning = true;
       } else {
+        await _callService.disableGlobalRecording();
         await BackgroundRecordingService.stopService();
         _isServiceRunning = false;
       }

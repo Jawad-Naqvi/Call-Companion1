@@ -6,11 +6,29 @@ import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:call_companion/models/call.dart';
 import 'package:call_companion/services/neon_call_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:phone_state/phone_state.dart';
+import 'dart:async';
 
 class CallService {
   final NeonCallService _neonService = NeonCallService();
-  Future<void> enableGlobalRecording() async {
+  StreamSubscription<PhoneState>? _phoneSubscription;
+
+  /// Enable global recording and (optionally) attach phone-state detection.
+  /// If [employeeId] is provided, auto start/stop recording on call events.
+  Future<void> enableGlobalRecording({String? employeeId}) async {
     _globalRecordingEnabled = true;
+
+    // Request critical permissions on Android
+    if (Platform.isAndroid) {
+      await _ensurePermissions();
+
+      // Attach phone listener if we have an employee id
+      if (employeeId != null) {
+        await setupCallDetection(employeeId);
+      }
+    }
+
     // Here you would start the background service if needed
     // For example: await BackgroundRecordingService.startService();
   }
@@ -19,6 +37,7 @@ class CallService {
     _globalRecordingEnabled = false;
     // Here you would stop the background service if needed
     // For example: await BackgroundRecordingService.stopService();
+    await _detachCallDetection();
   }
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -43,14 +62,67 @@ class CallService {
     return await _recorder.hasPermission();
   }
 
-  // Auto-record calls when enabled
+  Future<void> _ensurePermissions() async {
+    // Microphone is required by record plugin
+    final mic = await Permission.microphone.request();
+    // Phone state and call log help detect call events/number
+    final phone = await Permission.phone.request();
+    // Some OEMs require call log to get numbers; it's optional
+    await Permission.callLog.request();
+
+    if (!mic.isGranted) {
+      throw Exception('Microphone permission is required for call recording');
+    }
+    if (!phone.isGranted) {
+      // We can still try manual start, but auto-detection won't work
+      print('[CallService] Phone permission not granted; auto-detection disabled');
+    }
+  }
+
+  // Auto-record calls when enabled (Android only). Safe no-op on other platforms.
   Future<void> setupCallDetection(String employeeId) async {
-    // This would typically use platform-specific code to detect calls
-    // For Android, we would use PhoneStateListener
-    // For iOS, we would use CXCallObserver
-    
-    // For demo purposes, we'll simulate this with a method that would be called
-    // by the platform-specific code when a call is detected
+    if (!Platform.isAndroid) return;
+    // Avoid multiple subscriptions
+    await _detachCallDetection();
+
+    try {
+      // Ensure permissions
+      await _ensurePermissions();
+
+      // Start listening to phone state
+      _phoneSubscription = PhoneState.phoneStateStream.listen((event) async {
+        final status = event.status;
+        final number = event.number; // may be null on newer Androids
+
+        if (!_globalRecordingEnabled) return;
+
+        // Start recording when call starts/ongoing
+        if (status == PhoneStateStatus.CALL_STARTED ||
+            status == PhoneStateStatus.CALL_INCOMING) {
+          if (!_isRecording) {
+            final phoneNumber = (number?.isNotEmpty == true) ? number! : 'unknown';
+            final type = (status == PhoneStateStatus.CALL_INCOMING)
+                ? CallType.incoming
+                : CallType.outgoing;
+
+            await onCallDetected(phoneNumber, type, employeeId);
+          }
+        }
+
+        // Stop recording when call ends
+        if (status == PhoneStateStatus.CALL_ENDED) {
+          await stopCallRecording();
+        }
+      });
+      print('[CallService] Phone state listener attached');
+    } catch (e) {
+      print('[CallService] Failed to attach phone state listener: $e');
+    }
+  }
+
+  Future<void> _detachCallDetection() async {
+    await _phoneSubscription?.cancel();
+    _phoneSubscription = null;
   }
   
   // Called by platform code when a call is detected
@@ -137,7 +209,37 @@ class CallService {
       final directory = await getTemporaryDirectory();
       final recordingPath = '${directory.path}/call_$callId.m4a';
 
-      await _recorder.start(const RecordConfig(), path: recordingPath);
+      // Prefer voice communication source on Android for call capture
+      final config = RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        bitRate: 128000,
+        sampleRate: 44100,
+        androidConfig: const AndroidRecordConfig(
+          // VOICE_COMMUNICATION is more widely allowed than VOICE_CALL on newer Androids
+          // On Android 15 (OPPO CPH2569), we need to be more permissive and handle failures
+          audioSource: AndroidAudioSource.voiceCommunication,
+        ),
+      );
+
+      try {
+        await _recorder.start(config, path: recordingPath);
+        print('[CallService] Recording started successfully with VOICE_COMMUNICATION');
+      } catch (e) {
+        print('[CallService] Primary audio source failed on Android 15, trying fallback: $e');
+        try {
+          // Fallback to default config if voice communication fails (Android 15 restriction)
+          await _recorder.start(const RecordConfig(), path: recordingPath);
+          print('[CallService] Recording started with fallback config');
+        } catch (fallbackError) {
+          print('[CallService] Both recording configs failed on Android 15: $fallbackError');
+          // Create a minimal call record even if recording fails (for debugging)
+          await _firestore.collection('calls').doc(callId).set(call.copyWith(
+            status: CallStatus.failed,
+            notes: 'Recording failed on Android 15: ${fallbackError.toString()}',
+          ).toJson());
+          return null;
+        }
+      }
 
       _isRecording = true;
       _currentCallId = callId;

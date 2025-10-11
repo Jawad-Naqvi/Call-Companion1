@@ -39,7 +39,6 @@ class RecordingToggle extends StatelessWidget {
                         content: Text('Error: $e'),
                         backgroundColor: Colors.red,
                       ),
-                    );
                   }
                 },
               ),
