@@ -190,6 +190,8 @@ class CallTile extends StatelessWidget {
         return 'TRANSCRIBING';
       case CallStatus.analyzed:
         return 'ANALYZED';
+      case CallStatus.failed:
+        return 'FAILED';
     }
   }
 
@@ -209,6 +211,10 @@ class CallTile extends StatelessWidget {
         return Theme.of(context).brightness == Brightness.light
             ? LightModeColors.lightSuccess
             : DarkModeColors.darkSuccess;
+      case CallStatus.failed:
+        return Theme.of(context).brightness == Brightness.light
+            ? LightModeColors.lightError
+            : DarkModeColors.darkError;
     }
   }
 }
