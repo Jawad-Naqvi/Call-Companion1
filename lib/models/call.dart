@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum CallType { incoming, outgoing }
-enum CallStatus { recording, completed, transcribing, analyzed }
+enum CallStatus { recording, completed, transcribing, analyzed, failed }
 
 class Call {
   final String id;
