@@ -27,6 +27,26 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
+    - name: Create .env file for build
+      run: |
+        cat > .env << EOF
+        # Firebase Configuration (dummy values for build)
+        FIREBASE_CREDENTIALS={"type": "service_account", "project_id": "dummy-project"}
+
+        # API Keys (dummy values for build)
+        WHISPER_API_KEY=dummy_whisper_key
+        GEMINI_API_KEY=dummy_gemini_key
+
+        # Backend Configuration
+        BACKEND_HOST=0.0.0.0
+        BACKEND_PORT=8000
+        LOG_LEVEL=INFO
+
+        # Frontend Configuration
+        FRONTEND_URL=http://localhost
+        API_BASE_URL=http://localhost:8000
+        EOF
+
     - name: Cache Flutter dependencies
       uses: actions/cache@v4
       with:
