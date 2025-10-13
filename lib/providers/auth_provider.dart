@@ -82,6 +82,33 @@ class AuthProvider extends ChangeNotifier {
     }
   }
   
+  Future<bool> signInWithGoogle() async {
+    _error = null;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Always use Firebase-based Google sign-in (works on web and mobile)
+      final result = await fb_auth.AuthService().signInWithGoogle();
+      if (result.isSuccess && result.user != null) {
+        _user = result.user;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = result.error;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _error = 'Google sign-in failed: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+  
 
   Future<bool> signUp({
     required String email,

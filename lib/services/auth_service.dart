@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:call_companion/models/user.dart';
 
 class AuthService {
@@ -41,6 +42,48 @@ class AuthService {
       return UserAuthResult.error(_getAuthErrorMessage(e.code));
     } catch (e) {
       return UserAuthResult.error('An unexpected error occurred: $e');
+    }
+  }
+
+  Future<UserAuthResult> signInWithGoogle() async {
+    try {
+      // Trigger Google sign-in flow
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        return UserAuthResult.error('Sign in cancelled');
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = auth.GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCred = await _auth.signInWithCredential(credential);
+      final fbUser = userCred.user;
+      if (fbUser == null) {
+        return UserAuthResult.error('Google sign in failed');
+      }
+
+      // Ensure user document exists
+      final doc = await _firestore.collection('users').doc(fbUser.uid).get();
+      if (!doc.exists) {
+        final newUser = User(
+          id: fbUser.uid,
+          email: fbUser.email ?? '',
+          name: fbUser.displayName ?? 'User',
+          role: UserRole.employee,
+          companyId: null,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        await _firestore.collection('users').doc(newUser.id).set(newUser.toJson());
+        return UserAuthResult.success(newUser);
+      }
+
+      return UserAuthResult.success(User.fromJson({...doc.data()!, 'id': doc.id}));
+    } catch (e) {
+      return UserAuthResult.error('Google sign in error: $e');
     }
   }
 

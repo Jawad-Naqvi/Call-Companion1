@@ -50,6 +50,23 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
   
+  Future<void> _signInWithGoogle() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final ok = await authProvider.signInWithGoogle();
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(authProvider.error ?? 'Google sign in failed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +196,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 
                 const SizedBox(height: 24),
+
+                // Google sign-in
+                SizedBox(
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _signInWithGoogle,
+                    icon: const Icon(Icons.login),
+                    label: const Text('Sign in with Google'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
                 
                 // Forgot password
                 TextButton(

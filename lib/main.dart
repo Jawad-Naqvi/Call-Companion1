@@ -35,22 +35,16 @@ void main() async {
     // Continue without .env on web; backend will supply AI key
   }
   
-  // Initialize Firebase with environment variables
-  if (!kIsWeb) {
-    try {
-      await Firebase.initializeApp();
-      print('Firebase initialized successfully');
-      AppConfig.useApiAuth = false; // use Firebase auth on mobile
-    } catch (e) {
-      print('Firebase initialization error: $e');
-      // Fall back to API auth on mobile if Firebase is unavailable
-      AppConfig.useApiAuth = true;
-      print('AppConfig.useApiAuth enabled (Firebase unavailable)');
-    }
-  } else {
-    // On web we always use API auth
-    AppConfig.useApiAuth = true;
+  // Initialize Firebase on all platforms (needed for Google Sign-In on web and mobile)
+  try {
+    await Firebase.initializeApp();
+    print('Firebase initialized successfully');
+  } catch (e) {
+    print('Firebase initialization error: $e');
   }
+
+  // Prefer Firebase auth by default to support Google Sign-In across platforms
+  AppConfig.useApiAuth = false;
 
   print('Auth mode: ' + (AppConfig.useApiAuth ? 'API auth' : 'Firebase auth'));
   
