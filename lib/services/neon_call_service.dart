@@ -3,14 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:call_companion/services/auth_api_service.dart' as api_auth;
 
 /// Service to sync call recordings to Neon database via backend API
 /// Works alongside Firebase storage for redundancy
 class NeonCallService {
-  // Use the same backend URL as auth
-  static const String baseUrl = kIsWeb 
-      ? 'http://localhost:8001/api'
-      : 'http://192.168.1.17:8001/api';
+  // Resolve backend URL via the same logic as API auth service
+  static String get baseUrl => api_auth.AuthService.baseUrl;
   
   static const String tokenKey = 'auth_token';
 

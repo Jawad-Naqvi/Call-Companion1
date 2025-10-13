@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:call_companion/config/environment.dart';
+import 'package:call_companion/services/auth_api_service.dart' as api_auth;
 import 'package:call_companion/models/ai_summary.dart';
 import 'package:call_companion/models/transcript.dart';
 import 'package:call_companion/models/chat_message.dart';
@@ -84,7 +85,7 @@ class AIService {
           'temperature': 0.7,
         });
         final resp = await http.post(
-          Uri.parse('http://127.0.0.1:8001/api/ai/chat'),
+          Uri.parse('${api_auth.AuthService.baseUrl}/ai/chat'),
           headers: headers,
           body: body,
         );

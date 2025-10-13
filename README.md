@@ -4,6 +4,29 @@ A real-time call management app for container sales teams that records, transcri
 
 ## Deployment Guide
 
+### Device testing (APK) and backend URL
+
+Create a `.env` in the project root with your backend base URL so physical devices can reach it over LAN. Ensure your backend is started with host `0.0.0.0` (the provided `server/start_server.bat` already does this).
+
+```
+# Required for devices/APK. Include the /api suffix
+API_BASE_URL=http://<YOUR_PC_LAN_IP>:8001/api
+
+# Optional
+GEMINI_API_KEY=...
+WHISPER_API_KEY=...
+NEON_CONNECTION_STRING=postgres://...
+```
+
+Commands:
+```
+server/start_server.bat   # starts FastAPI on 0.0.0.0:8001
+flutter pub get
+flutter run -d chrome     # web
+flutter run -d <android>  # device uses .env API_BASE_URL
+flutter build apk --release
+```
+
 ## 🎯 Features
 
 ### For Employees (Salespeople)
@@ -451,5 +474,6 @@ For issues and questions:
 ---
 
 **Built with ❤️ for sales teams who want to close more deals**
-#   C a l l - C o m p a n i o n 1  
+#   C a l l - C o m p a n i o n 1 
+ 
  

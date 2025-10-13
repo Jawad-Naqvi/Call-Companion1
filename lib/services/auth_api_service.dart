@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:call_companion/models/user.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class UserAuthResult {
   final bool isSuccess;
@@ -52,7 +53,10 @@ class AuthService {
       // If hosted elsewhere (production), use same-origin + /api
       return origin + '/api';
     }
-    // Default for Android emulator. On physical devices, pass --dart-define=API_BASE_URL=http://<LAN_IP>:8001/api
+    // Mobile/Desktop: allow override via .env (persistently for APKs)
+    final envUrl = dotenv.maybeGet('API_BASE_URL');
+    if (envUrl != null && envUrl.isNotEmpty) return envUrl;
+    // Default for Android emulator. For physical devices, set API_BASE_URL in .env or via --dart-define
     return 'http://10.0.2.2:8001/api';
   }
   static const String tokenKey = 'auth_token';
