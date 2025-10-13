@@ -41,8 +41,24 @@ class AuthService {
   // 2) Otherwise use sane defaults depending on environment
   static const String _envBaseUrl = String.fromEnvironment('API_BASE_URL');
 
+  static String _normalizeApiBase(String raw) {
+    if (raw.isEmpty) return raw;
+    var url = raw.trim();
+    // Ensure scheme
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'http://' + url;
+    }
+    // Append /api if missing
+    if (!url.endsWith('/api')) {
+      // Avoid double slashes
+      url = url.replaceFirst(RegExp(r'/+$'), '');
+      url += '/api';
+    }
+    return url;
+  }
+
   static String get baseUrl {
-    if (_envBaseUrl.isNotEmpty) return _envBaseUrl;
+    if (_envBaseUrl.isNotEmpty) return _normalizeApiBase(_envBaseUrl);
     if (kIsWeb) {
       // If developing locally, the backend runs on 8001 while Flutter web serves on a random port.
       // Default to backend on 8001 to avoid 404 from the dev server.
@@ -55,7 +71,7 @@ class AuthService {
     }
     // Mobile/Desktop: allow override via .env (persistently for APKs)
     final envUrl = dotenv.maybeGet('API_BASE_URL');
-    if (envUrl != null && envUrl.isNotEmpty) return envUrl;
+    if (envUrl != null && envUrl.isNotEmpty) return _normalizeApiBase(envUrl);
     // Default for Android emulator. For physical devices, set API_BASE_URL in .env or via --dart-define
     return 'http://10.0.2.2:8001/api';
   }
