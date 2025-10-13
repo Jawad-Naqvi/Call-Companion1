@@ -31,6 +31,9 @@ class UserAuthResult {
   }
 }
 
+// Use LAN IP for physical devices so they can reach your PC backend
+  // static const String baseUrl = 'http://192.168.1.17:8001/api';
+
 class AuthService {
   // Production-ready base URL resolution
   // 1) Prefer compile-time define: --dart-define=API_BASE_URL=https://api.example.com/api
@@ -40,8 +43,14 @@ class AuthService {
   static String get baseUrl {
     if (_envBaseUrl.isNotEmpty) return _envBaseUrl;
     if (kIsWeb) {
-      // Use the current origin (e.g., http://localhost:xxxx) and append /api for web
-      return Uri.base.origin + '/api';
+      // If developing locally, the backend runs on 8001 while Flutter web serves on a random port.
+      // Default to backend on 8001 to avoid 404 from the dev server.
+      final origin = Uri.base.origin;
+      if (origin.contains('localhost') || origin.contains('127.0.0.1')) {
+        return 'http://localhost:8001/api';
+      }
+      // If hosted elsewhere (production), use same-origin + /api
+      return origin + '/api';
     }
     // Default for Android emulator. On physical devices, pass --dart-define=API_BASE_URL=http://<LAN_IP>:8001/api
     return 'http://10.0.2.2:8001/api';
