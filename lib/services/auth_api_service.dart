@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:call_companion/models/user.dart';
@@ -31,8 +32,20 @@ class UserAuthResult {
 }
 
 class AuthService {
-  // Use LAN IP for physical devices so they can reach your PC backend
-  static const String baseUrl = 'http://192.168.1.17:8001/api';
+  // Production-ready base URL resolution
+  // 1) Prefer compile-time define: --dart-define=API_BASE_URL=https://api.example.com/api
+  // 2) Otherwise use sane defaults depending on environment
+  static const String _envBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+  static String get baseUrl {
+    if (_envBaseUrl.isNotEmpty) return _envBaseUrl;
+    if (kIsWeb) {
+      // Use the current origin (e.g., http://localhost:xxxx) and append /api for web
+      return Uri.base.origin + '/api';
+    }
+    // Default for Android emulator. On physical devices, pass --dart-define=API_BASE_URL=http://<LAN_IP>:8001/api
+    return 'http://10.0.2.2:8001/api';
+  }
   static const String tokenKey = 'auth_token';
   
   // Mock auth state changes stream for compatibility
