@@ -12,6 +12,7 @@ import 'package:call_companion/screens/employee/employee_dashboard.dart';
 import 'package:call_companion/screens/admin/admin_dashboard.dart';
 import 'package:call_companion/services/env_service.dart';
 import 'package:call_companion/config/app_config.dart';
+import 'package:call_companion/services/auth_api_service.dart' as api_auth;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -25,6 +26,10 @@ void main() async {
       print('Skipping .env load on web');
     }
     EnvService.printConfiguration();
+    // Print resolved API base URL for diagnostics on device/APK
+    try {
+      print('Resolved API base URL: ' + api_auth.AuthService.baseUrl);
+    } catch (_) {}
   } catch (e) {
     print('Error loading .env file: $e');
     // Continue without .env on web; backend will supply AI key
