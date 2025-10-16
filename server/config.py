@@ -48,13 +48,24 @@ class Settings(BaseSettings):
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     # Debug flags
     debug_ai: bool = os.getenv("DEBUG_AI", "true").lower() in ("1", "true", "yes", "on")
+    # Admin allowlist raw string (comma-separated). We'll normalize after instantiation.
+    admin_emails: str = os.getenv(
+        "ADMIN_EMAILS",
+        "naqvimohammedjawad@gmail.com"
+    )
 
     class Config:
         env_file = "../.env"
         extra = "ignore"
 
-# Create settings instance
+# After instantiation, normalize admin_emails to a list for downstream usage
 settings = Settings()
+try:
+    if isinstance(settings.admin_emails, str):
+        parsed = [e.strip().lower() for e in settings.admin_emails.split(',') if e.strip()]
+        object.__setattr__(settings, 'admin_emails', parsed)
+except Exception as _e:
+    logger.warning(f"Failed to normalize ADMIN_EMAILS: {_e}")
 
 # Log configuration status
 logger.info("=== Configuration Status ===")
@@ -62,6 +73,7 @@ logger.info(f"Database URL configured: {bool(settings.neon_connection_string)}")
 logger.info(f"Gemini API Key configured: {bool(settings.gemini_api_key)}")
 logger.info(f"API Host: {settings.api_host}:{settings.api_port}")
 logger.info(f"JWT configured: {bool(settings.jwt_secret != 'your-super-secret-jwt-key-change-this-in-production')}")
+logger.info(f"Admin allowlist size: {len(settings.admin_emails) if isinstance(settings.admin_emails, (list, tuple)) else 0}")
 logger.info("=============================")
 
 # Export a flag for database availability

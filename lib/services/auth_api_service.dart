@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,6 +115,73 @@ class AuthService {
     return headers;
   }
   
+  // Sync Google authenticated user with Neon DB
+  Future<UserAuthResult> syncGoogleUser({
+    required String email,
+    required String name,
+    required String firebaseUid,
+    required UserRole role,
+    required String companyId,
+  }) async {
+    try {
+      print('Syncing Google user to Neon DB: $email');
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/google-sync'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'name': name,
+              'role': role.name.toLowerCase(),
+              'company_id': companyId,
+              'firebase_uid': firebaseUid,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      
+      print('Google sync response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // Store token
+        await _storeToken(data['access_token']);
+        
+        // Create user object
+        final userData = data['user'];
+        DateTime _safeParseDate(dynamic v) {
+          if (v == null) return DateTime.now();
+          if (v is String && v.isNotEmpty) {
+            return DateTime.tryParse(v) ?? DateTime.now();
+          }
+          return DateTime.now();
+        }
+        final roleStr = (userData['role'] as String? ?? 'employee').toLowerCase();
+        final user = User(
+          id: userData['id'],
+          email: userData['email'],
+          name: userData['name'],
+          role: roleStr == 'admin' ? UserRole.admin : UserRole.employee,
+          companyId: userData['companyId'],
+          createdAt: _safeParseDate(userData['createdAt']),
+          updatedAt: _safeParseDate(userData['updatedAt']),
+        );
+        
+        print('Google user synced successfully: ${user.email} (${user.role.name})');
+        return UserAuthResult.success(user);
+      } else {
+        print('Google sync failed: ${response.body}');
+        return UserAuthResult.error('Failed to sync user with database');
+      }
+    } on TimeoutException catch (_) {
+      print('Google sync timeout after 12s');
+      return UserAuthResult.error('Timeout syncing user with database');
+    } catch (e) {
+      print('Google sync error: $e');
+      return UserAuthResult.error('Network error during sync: $e');
+    }
+  }
+
   // Sign up with email and password
   Future<UserAuthResult> signUpWithEmailPassword(
     String email,
@@ -231,10 +299,12 @@ class AuthService {
   Future<User?> getCurrentAppUser() async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/auth/me'),
-        headers: headers,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/auth/me'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 8));
       
       if (response.statusCode == 200) {
         final userData = jsonDecode(response.body);
@@ -259,7 +329,14 @@ class AuthService {
         // Token expired or invalid
         await _removeToken();
         return null;
+      } else if (response.statusCode == 404) {
+        // Wrong path previously used; ensure no crash
+        print('getCurrentAppUser: endpoint not found (404) at /auth/me');
+        return null;
       }
+    } on TimeoutException catch (_) {
+      print('getCurrentAppUser timeout after 8s');
+      return null;
     } catch (e) {
       print('Error getting current user: $e');
     }
@@ -275,10 +352,12 @@ class AuthService {
   Future<List<User>> getEmployeesByCompany(String companyId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/auth/employees?company_id=$companyId'),
-        headers: headers,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/auth/employees?company_id=$companyId'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
       
       if (response.statusCode == 200) {
         final List<dynamic> employeesData = jsonDecode(response.body);
@@ -301,9 +380,16 @@ class AuthService {
             updatedAt: _safeParseDate(userData['updatedAt']),
           );
         }).toList();
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        // Not authorized (e.g., Google-authenticated admin without API JWT)
+        // Return empty list instead of throwing to keep UI stable.
+        return [];
       } else {
-        throw Exception('Failed to load employees');
+        return [];
       }
+    } on TimeoutException catch (_) {
+      // Avoid blocking the UI; show empty state instead
+      return [];
     } catch (e) {
       print('Error getting employees: $e');
       return [];

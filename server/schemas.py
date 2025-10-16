@@ -15,6 +15,13 @@ class UserLoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class GoogleAuthSyncRequest(BaseModel):
+    email: EmailStr
+    name: str
+    role: str  # 'admin' or 'employee'
+    company_id: Optional[str] = 'default-company'
+    firebase_uid: str
+
 class UserUpdateRequest(BaseModel):
     name: Optional[str] = None
     is_active: Optional[bool] = None

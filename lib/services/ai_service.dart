@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -84,11 +85,13 @@ class AIService {
           'context': context,
           'temperature': 0.7,
         });
-        final resp = await http.post(
-          Uri.parse('${api_auth.AuthService.baseUrl}/ai/chat'),
-          headers: headers,
-          body: body,
-        );
+        final resp = await http
+            .post(
+              Uri.parse('${api_auth.AuthService.baseUrl}/ai/chat'),
+              headers: headers,
+              body: body,
+            )
+            .timeout(const Duration(seconds: 12));
         if (resp.statusCode == 200) {
           final data = jsonDecode(resp.body);
           response = data['reply'] as String?;
@@ -118,6 +121,9 @@ class AIService {
       }
       
       return response;
+    } on TimeoutException catch (_) {
+      print('AI proxy timeout after 12s');
+      return null;
     } catch (e) {
       print('Error generating AI response: $e');
       return null;

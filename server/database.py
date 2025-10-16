@@ -10,9 +10,28 @@ logger = logging.getLogger(__name__)
 if settings.neon_connection_string:
     try:
         logger.info("Creating database engine...")
+        # Sanitize connection string: remove unsupported params (e.g., channel_binding) for psycopg
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        raw = settings.neon_connection_string
+        parsed = urlparse(raw)
+        qs = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        # Ensure sslmode, drop channel_binding (psycopg may not support it)
+        qs.pop('channel_binding', None)
+        if not qs.get('sslmode'):
+            qs['sslmode'] = 'require'
+        sanitized_query = urlencode(qs)
+        sanitized_url = urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            sanitized_query,
+            parsed.fragment,
+        ))
+
         # Create database engine with production-ready connection pooling
         engine = create_engine(
-            settings.neon_connection_string.replace("postgresql://", "postgresql+psycopg://"),
+            sanitized_url.replace("postgresql://", "postgresql+psycopg://"),
             pool_pre_ping=True,  # Verify connections before using them
             pool_recycle=3600,  # Recycle connections after 1 hour
             pool_size=10,  # Maintain 10 connections in the pool

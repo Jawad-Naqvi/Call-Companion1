@@ -10,6 +10,7 @@ import 'package:call_companion/providers/customer_provider.dart';
 import 'package:call_companion/screens/auth/login_screen.dart';
 import 'package:call_companion/screens/employee/employee_dashboard.dart';
 import 'package:call_companion/screens/admin/admin_dashboard.dart';
+import 'package:call_companion/screens/auth/role_select_screen.dart';
 import 'package:call_companion/services/env_service.dart';
 import 'package:call_companion/config/app_config.dart';
 import 'package:call_companion/services/auth_api_service.dart' as api_auth;
@@ -37,7 +38,20 @@ void main() async {
   
   // Initialize Firebase on all platforms (needed for Google Sign-In on web and mobile)
   try {
-    await Firebase.initializeApp();
+    if (kIsWeb) {
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: 'AIzaSyBWhnCDLZxjXEA1S5ogdtWFltuHoa-O9PI',
+          authDomain: 'call-companion-ff585.firebaseapp.com',
+          projectId: 'call-companion-ff585',
+          storageBucket: 'call-companion-ff585.appspot.com',
+          messagingSenderId: '605403679937',
+          appId: '1:605403679937:web:2f6383a933b38730579840',
+        ),
+      );
+    } else {
+      await Firebase.initializeApp();
+    }
     print('Firebase initialized successfully');
   } catch (e) {
     print('Firebase initialization error: $e');
@@ -97,6 +111,9 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (authProvider.isAuthenticated) {
+          if (authProvider.needsRoleSelection) {
+            return const RoleSelectScreen();
+          }
           if (authProvider.isEmployee) {
             return const EmployeeDashboard();
           } else {

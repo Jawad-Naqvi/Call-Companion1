@@ -24,6 +24,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _loadEmployees() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -32,12 +33,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final employees = await authProvider.getCompanyEmployees();
-      
+      if (!mounted) return;
       setState(() {
         _employees = employees;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Failed to load employees: $e';
         _isLoading = false;

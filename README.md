@@ -1,3 +1,294 @@
+# Call Companion App
+
+> Real-time call management app for container sales teams with AI-powered transcription, summaries, and intelligent insights.
+
+## 🎯 Overview
+
+Call Companion is a production-ready application that automatically records customer calls, transcribes them in Indian languages, and provides AI-powered analysis. Built for sales teams who need to manage customer interactions efficiently.
+
+### Key Features
+
+- **🎙️ Automatic Call Recording**: Global toggle to record all calls automatically
+- **🗣️ Multi-language Transcription**: Supports Hindi, English, and Hinglish using Whisper API
+- **🤖 AI-Powered Analysis**: Gemini AI provides call summaries, sentiment analysis, and next steps
+- **💬 Intelligent Chat**: Context-aware AI chat using all past customer interactions
+- **👥 WhatsApp-style Interface**: Intuitive customer thread management
+- **📊 Admin Dashboard**: Complete oversight of employee activities and call analytics
+- **🔒 Enterprise Security**: Firebase authentication with role-based access
+- **☁️ Production Database**: PostgreSQL (Neon) with reliable connection handling
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.8+** (for backend)
+- **Flutter SDK** (for frontend)
+- **Firebase Project** (for authentication & storage)
+- **Neon PostgreSQL** (for database)
+- **API Keys**: Whisper (OpenAI) and Gemini (Google)
+
+### 1. Clone Repository
+
+```bash
+git clone <repository-url>
+cd call_companion
+```
+
+### 2. Backend Setup
+
+```bash
+cd backend
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment file
+copy .env.example .env
+
+# Edit .env with your configuration
+notepad .env
+```
+
+**Configure your `.env` file:**
+
+```env
+# Database
+NEON_CONNECTION_STRING=postgresql://username:password@host/database
+
+# Firebase
+FIREBASE_CREDENTIALS_PATH=call-companion.json
+FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+
+# API Keys
+WHISPER_API_KEY=sk-proj-...
+GEMINI_API_KEY=AIzaSy...
+
+# Server
+HOST=0.0.0.0
+PORT=8001
+```
+
+**Add Firebase Service Account Key:**
+
+1. Download your Firebase service account key from Firebase Console
+2. Save it as `call-companion.json` in the backend folder
+3. Update the path in `.env` if different
+
+### 3. Start Backend Server
+
+**Windows:**
+```cmd
+start_server.bat
+```
+
+**Linux/Mac:**
+```bash
+python start_server.py
+```
+
+The server will start at `http://localhost:8001`
+
+### 4. Frontend Setup
+
+```bash
+cd .. # Back to root directory
+
+# Install Flutter dependencies
+flutter pub get
+
+# Update your API base URL in .env
+echo "API_BASE_URL=http://192.168.1.24:8001/api" >> .env
+```
+
+**Note**: Replace `192.168.1.24` with your actual IP address for mobile device testing.
+
+### 5. Run Frontend
+
+**Web (Development):**
+```bash
+flutter run -d chrome
+```
+
+**Android (APK):**
+```bash
+flutter build apk --release
+```
+
+The APK will be available at `build/app/outputs/flutter-apk/app-release.apk`
+
+## 📱 Usage Guide
+
+### For Sales Employees
+
+1. **Login** with Firebase authentication (Google Sign-In supported)
+2. **Enable Recording** using the global toggle in settings
+3. **Make Calls** - they'll be automatically recorded when toggle is on
+4. **View Call History** in WhatsApp-style threads organized by customer
+5. **Get AI Insights**:
+   - Tap "AI Summary" on any call for highlights and next steps
+   - Use "Chat with AI" for personalized coaching based on call history
+6. **Manage Customers** - assign aliases/nicknames to phone numbers
+
+### For Admins
+
+1. **Login** with admin role
+2. **View All Employees** and their activity
+3. **Access Call Data** - recordings, transcripts, and AI summaries
+4. **Monitor Performance** through dashboard analytics
+5. **Review Interactions** across all customer touchpoints
+
+## 🛠️ Technical Architecture
+
+### Backend (FastAPI)
+- **Database**: Neon PostgreSQL with automatic connection recovery
+- **Authentication**: Firebase Admin SDK
+- **File Storage**: Firebase Storage for call recordings
+- **AI Services**: OpenAI Whisper + Google Gemini
+- **CORS**: Configured for both web and mobile clients
+
+### Frontend (Flutter)
+- **Authentication**: Firebase Auth with Google Sign-In
+- **State Management**: Provider pattern
+- **Recording**: Native audio recording with permissions
+- **Cross-platform**: Web browser + Android APK
+
+### Database Schema
+- `users` - Employee/admin accounts with recording preferences
+- `customers` - Phone numbers with aliases and metadata
+- `calls` - Call records with status tracking
+- `transcripts` - Speech-to-text results
+- `ai_summaries` - Gemini-generated insights
+- `chat_messages` - AI conversation history
+
+## 🔧 API Endpoints
+
+### Authentication
+- `POST /api/auth/signup` - Create new user account
+- `POST /api/auth/login` - Login with credentials
+- `GET /api/users/me` - Get current user info
+- `PUT /api/users/recording-toggle` - Enable/disable recording
+
+### Call Management
+- `POST /api/calls/record` - Upload call recording
+- `POST /api/calls/{id}/transcribe` - Generate transcript
+- `POST /api/calls/{id}/ai-summary` - Create AI summary
+- `GET /api/calls/{id}` - Get call details
+
+### Customer & Analytics
+- `GET /api/customers` - List all customers
+- `GET /api/customers/{phone}/calls` - Get customer call history
+- `POST /api/customers/{phone}/chat-ai` - Chat with AI about customer
+- `GET /api/dashboard/stats` - Get dashboard statistics
+
+## 🔒 Security Features
+
+- **Firebase Authentication**: Secure token-based auth
+- **Role-based Access**: Employee vs Admin permissions
+- **Database Security**: PostgreSQL with connection pooling
+- **File Encryption**: AES-256 for stored audio files
+- **API Rate Limiting**: Built-in FastAPI protection
+- **CORS Configuration**: Restricted to known origins
+
+## 📊 Monitoring & Analytics
+
+- **Call Success Rate**: Track recording/transcription success
+- **AI Usage Metrics**: Monitor summary and chat engagement
+- **Performance Tracking**: Database query optimization
+- **Error Logging**: Comprehensive error tracking and recovery
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+**Backend won't start:**
+- Check `.env` file configuration
+- Verify Firebase credentials file exists
+- Test database connection string
+- Ensure all required API keys are set
+
+**Frontend authentication issues:**
+- Verify Firebase configuration matches project
+- Check API base URL in `.env`
+- Ensure backend is running and accessible
+
+**Call recording not working:**
+- Check microphone permissions
+- Verify recording toggle is enabled
+- Test audio file upload to backend
+
+**AI features not responding:**
+- Verify Whisper and Gemini API keys
+- Check API quota limits
+- Review backend logs for API errors
+
+### Logs & Debugging
+
+**Backend logs:**
+```bash
+# View server logs
+tail -f backend/logs/app.log
+
+# Check database connections
+curl http://localhost:8001/api/health
+```
+
+**Frontend debugging:**
+```bash
+# Run with verbose logging
+flutter run --verbose
+
+# Check API connectivity
+curl -H "Authorization: Bearer <token>" http://localhost:8001/api/users/me
+```
+
+## 🔄 Deployment
+
+### Production Checklist
+
+- [ ] Update CORS origins to production domains
+- [ ] Use HTTPS for all API endpoints
+- [ ] Set up proper database backups
+- [ ] Configure log rotation
+- [ ] Set up monitoring and alerting
+- [ ] Update Firebase security rules
+- [ ] Test recording permissions on target devices
+- [ ] Verify API rate limits for production load
+
+### Environment Variables (Production)
+
+```env
+# Production database with connection pooling
+NEON_CONNECTION_STRING=postgresql://user:pass@prod-db:5432/callcompanion
+
+# Production Firebase project
+FIREBASE_PROJECT_ID=callcompanion-prod
+FIREBASE_STORAGE_BUCKET=callcompanion-prod.appspot.com
+
+# Production server config
+HOST=0.0.0.0
+PORT=8001
+LOG_LEVEL=INFO
+
+# Production API endpoints
+API_BASE_URL=https://api.yourcompany.com/api
+```
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🤝 Support
+
+For issues and questions:
+1. Check the troubleshooting guide above
+2. Review backend logs for specific errors
+3. Test API endpoints directly using the provided curl commands
+4. Verify all environment variables are correctly set
+
+---
+
+**Built for sales teams who demand reliability and intelligence in their customer interactions.**
+
 # Call Companion - AI-Powered Sales Call Management
 
 A real-time call management app for container sales teams that records, transcribes, and analyzes customer conversations using AI.

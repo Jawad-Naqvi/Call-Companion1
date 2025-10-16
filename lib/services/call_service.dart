@@ -1,18 +1,27 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:call_companion/models/call.dart';
-import 'package:call_companion/services/neon_call_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:phone_state/phone_state.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:call_companion/services/auth_api_service.dart' as api_auth;
 import 'dart:async';
 
 class CallService {
-  final NeonCallService _neonService = NeonCallService();
   StreamSubscription<PhoneState>? _phoneSubscription;
+  
+  String get _baseUrl => api_auth.AuthService.baseUrl;
+
+  // Firebase instances
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+  String? _employeeId;
 
   /// Enable global recording and (optionally) attach phone-state detection.
   /// If [employeeId] is provided, auto start/stop recording on call events.
@@ -39,10 +48,35 @@ class CallService {
     // For example: await BackgroundRecordingService.stopService();
     await _detachCallDetection();
   }
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
   final AudioRecorder _recorder = AudioRecorder();
   final Uuid _uuid = const Uuid();
+  
+  // Get authorization headers
+  Future<Map<String, String>> _getHeaders() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception('User not authenticated');
+    }
+    
+    final token = await user.getIdToken();
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+  }
+  
+  // Get multipart headers for file upload
+  Future<Map<String, String>> _getMultipartHeaders() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception('User not authenticated');
+    }
+    
+    final token = await user.getIdToken();
+    return {
+      'Authorization': 'Bearer $token',
+    };
+  }
 
   bool _isRecording = false;
   String? _currentCallId;
@@ -54,8 +88,28 @@ class CallService {
   String? get currentCallId => _currentCallId;
   
   // Global recording toggle
-  void setGlobalRecording(bool enabled) {
-    _globalRecordingEnabled = enabled;
+  // Toggle recording setting on backend
+  Future<bool> setGlobalRecording(bool enabled) async {
+    try {
+      final headers = await _getHeaders();
+      
+      final request = http.MultipartRequest('PUT', Uri.parse('$_baseUrl/users/recording-toggle'));
+      request.headers.addAll(headers);
+      request.fields['enabled'] = enabled.toString();
+      
+      final response = await request.send();
+      
+      if (response.statusCode == 200) {
+        _globalRecordingEnabled = enabled;
+        return true;
+      } else {
+        print('Failed to update recording setting: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error updating recording setting: $e');
+      return false;
+    }
   }
 
   Future<bool> hasRecordingPermission() async {
@@ -128,31 +182,30 @@ class CallService {
   
   Future<String> _getOrCreateCustomerId(String phoneNumber) async {
     try {
-      // Check if customer exists
-      final querySnapshot = await _firestore
-          .collection('customers')
-          .where('phoneNumber', isEqualTo: phoneNumber)
-          .limit(1)
-          .get();
+      final headers = await _getHeaders();
       
-      if (querySnapshot.docs.isNotEmpty) {
-        return querySnapshot.docs.first.id;
+      // Get customers from backend to check if exists
+      final response = await http.get(
+        Uri.parse('$_baseUrl/customers'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final customers = data['customers'] as List<dynamic>;
+        
+        // Check if customer with this phone number exists
+        for (final customer in customers) {
+          if (customer['phone_number'] == phoneNumber) {
+            return customer['id'];
+          }
+        }
       }
       
-      // Create new customer
-      final customerId = _uuid.v4();
-      await _firestore.collection('customers').doc(customerId).set({
-        'id': customerId,
-        'phoneNumber': phoneNumber,
-        'alias': null, // Can be set later by employee
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      
-      return customerId;
+      // Customer doesn't exist, will be created automatically when recording call
+      return 'auto-create-$phoneNumber';
     } catch (e) {
-      print('Error getting/creating customer: $e');
-      // Return a temporary ID if we can't create a customer
+      print('Error getting customer: $e');
       return 'temp-${_uuid.v4()}';
     }
   }
@@ -185,9 +238,6 @@ class CallService {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-
-      // Save call to Firestore
-      await _firestore.collection('calls').doc(callId).set(call.toJson());
 
       // Start recording
       final directory = await getTemporaryDirectory();
@@ -257,58 +307,76 @@ class CallService {
       }
 
       final fileSize = await file.length();
+      final duration = endTime.difference(DateTime.now().subtract(Duration(seconds: endTime.difference(DateTime.now()).inSeconds))).inSeconds;
       
-      // Upload to Firebase Storage
-      final fileName = 'calls/${_currentCallId!}/recording.m4a';
-      final storageRef = _storage.ref().child(fileName);
-      
-      final uploadTask = storageRef.putFile(file);
-      final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-
-      // Calculate duration
-      final call = await getCallById(_currentCallId!);
-      if (call == null) {
-        throw Exception('Call not found');
-      }
-
-      final duration = endTime.difference(call.startTime).inSeconds;
-
-      // Update call in Firestore
-      final updatedCall = call.copyWith(
-        endTime: endTime,
-        duration: duration,
-        audioFileUrl: downloadUrl,
-        audioFileName: fileName,
-        audioFileSize: fileSize,
-        status: CallStatus.completed,
-        updatedAt: DateTime.now(),
-      );
-
-      await _firestore
-          .collection('calls')
-          .doc(_currentCallId!)
-          .update(updatedCall.toJson());
-
-      // Also upload to Neon database for backup and analytics
+      // Upload call recording to backend API
+      Call? call;
       try {
-        print('[CallService] Uploading call to Neon database...');
-        await _neonService.uploadCallRecording(
-          userId: call.employeeId,
-          customerNumber: call.customerPhoneNumber,
-          customerName: null, // Can be enriched later
-          callType: call.type == CallType.incoming ? 'incoming' : 'outgoing',
-          startedAt: call.startTime,
-          endedAt: endTime,
-          durationSec: duration,
-          firebaseCallId: _currentCallId,
-          firebaseAudioUrl: downloadUrl,
-          audioFile: file,
+        final headers = await _getMultipartHeaders();
+        
+        final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/calls/record'));
+        request.headers.addAll(headers);
+        
+        // Add form fields
+        request.fields['customer_phone_number'] = _currentRecordingPath?.split('_')[1].split('.')[0] ?? 'unknown';
+        request.fields['duration'] = duration.toString();
+        request.fields['call_type'] = 'outgoing'; // Default, could be determined by phone state
+        
+        // Add audio file
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'audio_file',
+            file.path,
+            filename: 'recording.m4a',
+          ),
         );
-        print('[CallService] ✅ Call uploaded to Neon database');
+        
+        final response = await request.send();
+        
+        if (response.statusCode == 200) {
+          final responseBody = await response.stream.bytesToString();
+          final data = jsonDecode(responseBody);
+          
+          print('[CallService] ✅ Call uploaded successfully: ${data['call_id']}');
+          
+          // Update local call object with backend data
+          call = Call(
+            id: data['call_id'],
+            employeeId: _employeeId ?? 'unknown', // From the current context
+            customerId: data['customer_id'],
+            customerPhoneNumber: request.fields['customer_phone_number']!,
+            type: CallType.outgoing,
+            status: CallStatus.completed,
+            startTime: endTime.subtract(Duration(seconds: duration)),
+            endTime: endTime,
+            duration: duration,
+            audioFileUrl: data['audio_url'],
+            audioFileName: 'recording.m4a',
+            audioFileSize: fileSize,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          
+          // Clean up local file
+          try {
+            await file.delete();
+          } catch (e) {
+            print('Error deleting local file: $e');
+          }
+          
+          _isRecording = false;
+          _currentCallId = null;
+          _currentRecordingPath = null;
+          
+          return call;
+        } else {
+          final errorBody = await response.stream.bytesToString();
+          print('[CallService] ❌ Failed to upload call: $errorBody');
+          throw Exception('Failed to upload call recording');
+        }
       } catch (e) {
-        print('[CallService] ⚠️ Failed to upload to Neon (non-critical): $e');
-        // Don't fail the whole operation if Neon upload fails
+        print('[CallService] ❌ Upload error: $e');
+        throw e;
       }
 
       // Clean up local file
@@ -322,7 +390,7 @@ class CallService {
       _currentCallId = null;
       _currentRecordingPath = null;
 
-      return updatedCall;
+      return call;
     } catch (e) {
       print('Error stopping recording: $e');
       _isRecording = false;
@@ -332,17 +400,24 @@ class CallService {
     }
   }
 
-  Future<List<Call>> getCallsByCustomer(String customerId) async {
+  // Get calls by customer phone number
+  Future<List<Call>> getCallsByCustomer(String customerPhone) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('calls')
-          .where('customerId', isEqualTo: customerId)
-          .orderBy('startTime', descending: true)
-          .get();
-
-      return querySnapshot.docs.map((doc) => 
-        Call.fromJson({...doc.data(), 'id': doc.id})
-      ).toList();
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/customers/$customerPhone/calls'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final callsData = data['calls'] as List<dynamic>;
+        
+        return callsData.map((callData) => Call.fromJson(callData)).toList();
+      } else {
+        print('Failed to get calls by customer: ${response.statusCode}');
+        return [];
+      }
     } catch (e) {
       print('Error getting calls by customer: $e');
       return [];
@@ -464,10 +539,148 @@ class CallService {
     }
   }
 
+  // Transcribe a call
+  Future<bool> transcribeCall(String callId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$_baseUrl/calls/$callId/transcribe'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Call transcribed successfully: ${data['transcript_id']}');
+        return true;
+      } else {
+        print('Failed to transcribe call: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error transcribing call: $e');
+      return false;
+    }
+  }
+  
+  // Generate AI summary for a call
+  Future<bool> generateAISummary(String callId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$_baseUrl/calls/$callId/ai-summary'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('AI summary generated successfully: ${data['summary_id']}');
+        return true;
+      } else {
+        print('Failed to generate AI summary: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error generating AI summary: $e');
+      return false;
+    }
+  }
+  
+  // Chat with AI about a customer
+  Future<String?> chatWithAI(String customerPhone, String message) async {
+    try {
+      final headers = await _getMultipartHeaders();
+      
+      final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/customers/$customerPhone/chat-ai'));
+      request.headers.addAll(headers);
+      request.fields['message'] = message;
+      
+      final response = await request.send();
+      
+      if (response.statusCode == 200) {
+        final responseBody = await response.stream.bytesToString();
+        final data = jsonDecode(responseBody);
+        return data['response'];
+      } else {
+        print('Failed to chat with AI: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('Error chatting with AI: $e');
+      return null;
+    }
+  }
+  
+  // Get dashboard statistics
+  Future<Map<String, dynamic>?> getDashboardStats() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/dashboard/stats'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['stats'];
+      } else {
+        print('Failed to get dashboard stats: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('Error getting dashboard stats: $e');
+      return null;
+    }
+  }
+  
+  // Get all customers
+  Future<List<Map<String, dynamic>>> getCustomers() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/customers'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['customers']);
+      } else {
+        print('Failed to get customers: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Error getting customers: $e');
+      return [];
+    }
+  }
+  
+  // Get call details
+  Future<Map<String, dynamic>?> getCallDetails(String callId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/calls/$callId'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['call'];
+      } else {
+        print('Failed to get call details: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('Error getting call details: $e');
+      return null;
+    }
+  }
+  
   Future<void> dispose() async {
     if (_isRecording) {
       await stopCallRecording();
     }
     await _recorder.dispose();
+    await _phoneSubscription?.cancel();
   }
 }

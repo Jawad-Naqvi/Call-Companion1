@@ -10,7 +10,7 @@ try:
     from config import settings, DB_AVAILABLE
     CONFIG_LOADED = True
 except Exception as e:
-    print(f"❌ Config import failed: {e}")
+    print(f"Config import failed: {e}")
     CONFIG_LOADED = False
     settings = None
     DB_AVAILABLE = False
@@ -19,7 +19,7 @@ try:
     from database import Base, engine, test_connection, ensure_users_table, DB_ENGINE_AVAILABLE
     DATABASE_LOADED = True
 except Exception as e:
-    print(f"❌ Database import failed: {e}")
+    print(f"Database import failed: {e}")
     DATABASE_LOADED = False
     Base = None
     engine = None
@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     global db_connected
 
     # Startup
-    logger.info("🚀 Starting Call Companion API Server...")
+    logger.info("Starting Call Companion API Server...")
 
     # Test database connection only if everything loaded properly
     if CONFIG_LOADED and DATABASE_LOADED and DB_AVAILABLE and DB_ENGINE_AVAILABLE:
@@ -51,15 +51,15 @@ async def lifespan(app: FastAPI):
             logger.info("Testing database connection...")
             if test_connection():
                 db_connected = True
-                logger.info("✅ Database connection successful")
+                logger.info("Database connection successful")
 
                 # Reconcile schema (idempotent) before creating tables
                 try:
                     logger.info("Reconciling database schema...")
                     ensure_users_table()
-                    logger.info("✅ Schema reconciliation complete")
+                    logger.info("Schema reconciliation complete")
                 except Exception as e:
-                    logger.error(f"❌ Schema reconciliation raised an error: {e}")
+                    logger.error(f"Schema reconciliation raised an error: {e}")
                     # Don't crash the server for schema issues
 
                 # Create database tables
@@ -67,27 +67,26 @@ async def lifespan(app: FastAPI):
                     logger.info("Creating/verifying database tables...")
                     if Base and engine:
                         Base.metadata.create_all(bind=engine)
-                    logger.info("✅ Database tables created/verified")
+                    logger.info("Database tables created/verified")
                 except Exception as e:
-                    logger.error(f"❌ Database table creation failed: {e}")
-                    # Don't crash the server for table creation issues
+                    logger.error(f"Database table creation failed: {e}")
             else:
-                logger.warning("⚠️ Database connection failed - server will run but auth may not work")
+                logger.warning("Database connection failed - server will run but auth may not work")
                 db_connected = False
         except Exception as e:
-            logger.error(f"❌ Database initialization error: {e}")
-            logger.warning("⚠️ Server will run but database-dependent features may not work")
+            logger.error(f"Database initialization error: {e}")
+            logger.warning("Server will run but database-dependent features may not work")
             db_connected = False
     else:
-        logger.warning("⚠️ Database or config not properly loaded - server will run in limited mode")
+        logger.warning("Database or config not properly loaded - server will run in limited mode")
         db_connected = False
 
-    logger.info("✅ Server startup complete")
+    logger.info("Server startup complete")
 
     yield
 
     # Shutdown
-    logger.info("🛑 Shutting down Call Companion API Server...")
+    logger.info("Shutting down Call Companion API Server...")
 
 # Create FastAPI app
 app = FastAPI(
@@ -110,23 +109,23 @@ app.add_middleware(
 try:
     from routes import auth
     app.include_router(auth.router, prefix="/api")
-    logger.info("✅ Auth routes loaded")
+    logger.info("Auth routes loaded")
 except Exception as e:
-    logger.error(f"❌ Auth routes failed to load: {e}")
+    logger.error(f"Auth routes failed to load: {e}")
 
 try:
     from routes import ai
     app.include_router(ai.router, prefix="/api")
-    logger.info("✅ AI routes loaded")
+    logger.info("AI routes loaded")
 except Exception as e:
-    logger.error(f"❌ AI routes failed to load: {e}")
+    logger.error(f"AI routes failed to load: {e}")
 
 try:
     from routes import calls
     app.include_router(calls.router, prefix="/api")
-    logger.info("✅ Calls routes loaded")
+    logger.info("Calls routes loaded")
 except Exception as e:
-    logger.error(f"❌ Calls routes failed to load: {e}")
+    logger.error(f"Calls routes failed to load: {e}")
 
 # Health check endpoint
 @app.get("/health")
